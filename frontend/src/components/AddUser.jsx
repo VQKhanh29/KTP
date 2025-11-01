@@ -1,40 +1,52 @@
 import React, { useState } from "react";
-import axios from "axios";
 
-function AddUser() {
+function AddUser({ onAdd }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    axios.post("http://localhost:3000/users", { name, email })
-      .then(() => {
-        alert("✅ Thêm người dùng thành công!");
-        setName("");
-        setEmail("");
-      })
-      .catch(err => {
-        alert("❌ Lỗi thêm người dùng!");
-        console.error(err);
-      });
+    if (!name.trim() || !email.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      if (typeof onAdd === "function") {
+        await onAdd({ name: name.trim(), email: email.trim() });
+      } else {
+        throw new Error("No onAdd handler provided");
+      }
+      setName("");
+      setEmail("");
+    } catch (err) {
+      console.error(err);
+      setError("Lỗi thêm người dùng!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>Thêm người dùng</h2>
+    <form onSubmit={handleSubmit} style={{ marginBottom: "20px" }}>
       <input
         type="text"
-        placeholder="Tên người dùng"
+        placeholder="Tên"
         value={name}
         onChange={e => setName(e.target.value)}
+        required
       />
       <input
         type="email"
         placeholder="Email"
         value={email}
         onChange={e => setEmail(e.target.value)}
+        required
       />
-      <button type="submit">Thêm</button>
+      <button type="submit" disabled={loading}>
+        {loading ? "Đang thêm..." : "Thêm User"}
+      </button>
+      {error && <p style={{ color: "red" }}>{error}</p>}
     </form>
   );
 }

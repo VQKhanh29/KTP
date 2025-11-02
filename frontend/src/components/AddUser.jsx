@@ -1,52 +1,52 @@
 import React, { useState } from "react";
+import axios from "axios";
 
-function AddUser({ onAdd }) {
+function AddUser({ fetchUsers }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
-    setLoading(true);
-    setError(null);
+
+    // ✅ Kiểm tra dữ liệu
+    if (!name.trim()) {
+      alert("⚠️ Name không được để trống");
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      alert("⚠️ Email không hợp lệ");
+      return;
+    }
+
     try {
-      if (typeof onAdd === "function") {
-        await onAdd({ name: name.trim(), email: email.trim() });
-      } else {
-        throw new Error("No onAdd handler provided");
-      }
+      // Use the auth signup endpoint to create a user
+      await axios.post("http://localhost:3000/api/auth/signup", { name, email, password: 'password123' });
+      alert("✅ Thêm user thành công!");
       setName("");
       setEmail("");
+      fetchUsers(); // cập nhật lại danh sách
     } catch (err) {
       console.error(err);
-      setError("Lỗi thêm người dùng!");
-    } finally {
-      setLoading(false);
+      alert("❌ Lỗi khi thêm user!");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginBottom: "20px" }}>
+    <form onSubmit={handleSubmit}>
+      <h3>Thêm người dùng mới</h3>
       <input
         type="text"
-        placeholder="Tên"
+        placeholder="Nhập tên"
         value={name}
-        onChange={e => setName(e.target.value)}
-        required
+        onChange={(e) => setName(e.target.value)}
       />
       <input
         type="email"
-        placeholder="Email"
+        placeholder="Nhập email"
         value={email}
-        onChange={e => setEmail(e.target.value)}
-        required
+        onChange={(e) => setEmail(e.target.value)}
       />
-      <button type="submit" disabled={loading}>
-        {loading ? "Đang thêm..." : "Thêm User"}
-      </button>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <button type="submit">Thêm</button>
     </form>
   );
 }

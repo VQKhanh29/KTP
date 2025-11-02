@@ -1,17 +1,16 @@
-// routes/user.js
 const express = require('express');
 const router = express.Router();
-const { getUsers, createUser, updateUser, deleteUser } = require('../controllers/userController');
+const { getUsers, deleteUser } = require('../controllers/userController');
+const { protect } = require('../controllers/authController');
+const { restrictTo } = require('../middleware/rbac');
 
-// Diagnostic (tùy chọn, có thể giữ để debug)
-console.log('DEBUG: loading routes/user.js, initial module.exports ->', module.exports);
+// All routes require authentication
+router.use(protect);
 
-// Định nghĩa các route CRUD cho User
-router.get('/', getUsers);            // GET /users
-router.post('/', createUser);         // POST /users
-router.put('/:id', updateUser);       // PUT /users/:id
-router.delete('/:id', deleteUser);    // DELETE /users/:id
+// Authenticated users can list users (admins will see roles). Keep delete rules in controller.
+router.get('/', getUsers);
+
+// Delete route - admin can delete any user, users can delete themselves
+router.delete('/:id', deleteUser);
 
 module.exports = router;
-
-console.log('DEBUG: routes/user.js set module.exports ->', module.exports);

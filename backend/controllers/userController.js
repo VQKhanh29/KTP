@@ -1,57 +1,73 @@
 const User = require("../models/User");
 
-// GET /users - Lấy danh sách tất cả người dùng
+// GET /users - Get all users (admin only)
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find();
-    res.json(users);
+    const users = await User.find().select('-password');
+    
+    res.json({
+      status: 'success',
+      results: users.length,
+      data: users
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Error getting users:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Không thể tải danh sách người dùng'
+    });
   }
 };
 
-// POST /users - Tạo người dùng mới
-const createUser = async (req, res) => {
-  try {
-    const newUser = new User(req.body);
-    await newUser.save();
-    res.status(201).json(newUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// PUT /users/:id - Cập nhật thông tin người dùng
-const updateUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updatedUser = await User.findByIdAndUpdate(id, req.body, { new: true });
-    if (!updatedUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// DELETE /users/:id - Xóa người dùng
+// DELETE /users/:id - Delete user (admin only or self-delete)
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedUser = await User.findByIdAndDelete(id);
-    if (!deletedUser) {
-      return res.status(404).json({ message: "User not found" });
+    
+    // Check if user exists
+    const userToDelete = await User.findById(id);
+    if (!userToDelete) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Không tìm thấy người dùng'
+      });
     }
-    res.json({ message: "User deleted successfully" });
+
+    // Allow admins to delete any user, but regular users can only delete themselves
+    if (req.user.role !== 'admin' && req.user._id.toString() !== id) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Bạn không có quyền xóa người dùng khác'
+      });
+    }
+
+    // Prevent deleting the last admin
+    if (userToDelete.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Không thể xóa admin cuối cùng'
+        });
+      }
+    }
+
+    await User.findByIdAndDelete(id);
+
+    res.json({
+      status: 'success',
+      message: 'Xóa người dùng thành công'
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Error deleting user:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Không thể xóa người dùng'
+    });
   }
 };
 
 module.exports = {
   getUsers,
-  createUser,
-  updateUser,
   deleteUser,
 };

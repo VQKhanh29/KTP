@@ -18,6 +18,10 @@ const restrictTo = (...roles) => {
   };
 };
 
+// Alias for better naming
+const checkRole = restrictTo;
+
 module.exports = {
-  restrictTo
+  restrictTo,
+  checkRole
 };

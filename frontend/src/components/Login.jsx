@@ -23,14 +23,15 @@ function Login({ onLoginSuccess }) {
 
     try {
       const response = await axios.post('http://localhost:3000/api/auth/login', formData);
-      const { token, user } = response.data;
-      
-      // Save token to localStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      // Update app state
-      if (onLoginSuccess) onLoginSuccess(token);
+  const { accessToken, refreshToken, user } = response.data;
+
+  // Save tokens to localStorage
+  localStorage.setItem('accessToken', accessToken);
+  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+  localStorage.setItem('user', JSON.stringify(user));
+
+  // Update app state
+  if (onLoginSuccess) onLoginSuccess();
       
       setFormData({ email: '', password: '' });
     } catch (err) {

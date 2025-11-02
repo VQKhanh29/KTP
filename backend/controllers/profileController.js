@@ -1,6 +1,9 @@
 const User = require('../models/User');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
+const sharp = require('sharp');
+const fs = require('fs').promises;
+const path = require('path');
 
 // Configure cloudinary from env - ensure we have the values
 const cloudinaryConfig = {
@@ -99,7 +102,7 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// Upload avatar to Cloudinary
+// Upload avatar to Cloudinary with Sharp optimization
 exports.uploadAvatar = async (req, res) => {
   try {
     console.log('[uploadAvatar] Request received');
@@ -111,26 +114,102 @@ exports.uploadAvatar = async (req, res) => {
       return res.status(400).json({ status: 'fail', message: 'Không có file được tải lên' });
     }
 
-    console.log('[uploadAvatar] File size:', req.file.size, 'bytes');
-    console.log('[uploadAvatar] File mimetype:', req.file.mimetype);
-    console.log('[uploadAvatar] Starting Cloudinary upload...');
+    // Validate file type
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ 
+        status: 'fail', 
+        message: 'Định dạng file không hợp lệ. Chỉ chấp nhận: JPEG, PNG, WEBP, GIF' 
+      });
+    }
 
+    // Validate file size (max 5MB before processing)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxSize) {
+      return res.status(400).json({ 
+        status: 'fail', 
+        message: 'Kích thước file quá lớn. Tối đa 5MB' 
+      });
+    }
+
+    console.log('[uploadAvatar] Original file size:', req.file.size, 'bytes');
+    console.log('[uploadAvatar] File mimetype:', req.file.mimetype);
+    console.log('[uploadAvatar] Processing with Sharp...');
+
+    // Process image with Sharp: resize to 400x400, compress, convert to webp
+    const processedImageBuffer = await sharp(req.file.buffer)
+      .resize(400, 400, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .webp({ quality: 85 }) // Convert to WebP with 85% quality
+      .toBuffer();
+
+    console.log('[uploadAvatar] Processed size:', processedImageBuffer.length, 'bytes');
+    console.log('[uploadAvatar] Size reduction:', 
+      ((1 - processedImageBuffer.length / req.file.size) * 100).toFixed(2) + '%');
+
+    // Delete old avatar from Cloudinary if exists
+    if (req.user.avatar && req.user.avatar.public_id) {
+      console.log('[uploadAvatar] Deleting old avatar:', req.user.avatar.public_id);
+      try {
+        await cloudinary.uploader.destroy(req.user.avatar.public_id);
+      } catch (err) {
+        console.log('[uploadAvatar] Could not delete old avatar:', err.message);
+      }
+    }
+
+    console.log('[uploadAvatar] Starting Cloudinary upload...');
     let uploadResult;
-    await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: 'avatars' }, 
-        (error, result) => {
-          if (error) {
-            console.error('[uploadAvatar] Cloudinary error:', error);
-            return reject(error);
+    
+    // Check if Cloudinary is configured
+    const hasCloudinary = cloudinaryConfig.cloud_name && 
+                          cloudinaryConfig.api_key && 
+                          cloudinaryConfig.api_secret;
+
+    if (hasCloudinary) {
+      // Upload to Cloudinary
+      await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { 
+            folder: 'avatars',
+            resource_type: 'image',
+            format: 'webp'
+          }, 
+          (error, result) => {
+            if (error) {
+              console.error('[uploadAvatar] Cloudinary error:', error);
+              return reject(error);
+            }
+            console.log('[uploadAvatar] Cloudinary success:', result.secure_url);
+            uploadResult = result;
+            resolve(result);
           }
-          console.log('[uploadAvatar] Cloudinary success:', result.secure_url);
-          uploadResult = result;
-          resolve(result);
-        }
-      );
-      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
-    });
+        );
+        streamifier.createReadStream(processedImageBuffer).pipe(uploadStream);
+      });
+    } else {
+      // Fallback: save to local uploads folder
+      console.log('[uploadAvatar] Cloudinary not configured, saving locally...');
+      const uploadsDir = path.join(__dirname, '../uploads/avatars');
+      
+      // Ensure directory exists
+      try {
+        await fs.mkdir(uploadsDir, { recursive: true });
+      } catch (err) {
+        if (err.code !== 'EEXIST') throw err;
+      }
+
+      const filename = `avatar-${req.user._id}-${Date.now()}.webp`;
+      const filepath = path.join(uploadsDir, filename);
+      await fs.writeFile(filepath, processedImageBuffer);
+
+      uploadResult = {
+        secure_url: `http://localhost:${process.env.PORT || 3000}/uploads/avatars/${filename}`,
+        public_id: filename
+      };
+      console.log('[uploadAvatar] Saved locally:', uploadResult.secure_url);
+    }
 
     console.log('[uploadAvatar] Updating user in DB...');
     // Save avatar info to user
@@ -142,7 +221,15 @@ exports.uploadAvatar = async (req, res) => {
     }, { new: true, select: '-password' });
 
     console.log('[uploadAvatar] Success! Avatar URL:', uploadResult.secure_url);
-    res.json({ status: 'success', data: user });
+    res.json({ 
+      status: 'success', 
+      data: user,
+      metadata: {
+        originalSize: req.file.size,
+        processedSize: processedImageBuffer.length,
+        compression: ((1 - processedImageBuffer.length / req.file.size) * 100).toFixed(2) + '%'
+      }
+    });
   } catch (error) {
     console.error('[uploadAvatar] Error:', error);
     res.status(500).json({ 

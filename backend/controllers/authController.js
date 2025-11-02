@@ -1,15 +1,23 @@
 const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
-// Generate JWT Token
-const generateToken = (userId) => {
-  return jwt.sign(
-    { id: userId }, 
-    process.env.JWT_SECRET, 
-    { expiresIn: '24h' }
-  );
+// Sign access token (short lived)
+const signAccessToken = (userId) => {
+  const expiresIn = process.env.ACCESS_TOKEN_EXPIRES || '15m';
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn });
+};
+
+// Create refresh token (random string) and persist
+const createRefreshToken = async (userId) => {
+  const token = crypto.randomBytes(40).toString('hex');
+  const days = parseInt(process.env.REFRESH_TOKEN_DAYS || '7', 10);
+  const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  const rt = await RefreshToken.create({ user: userId, token, expires });
+  return rt;
 };
 
 // Sign Up
@@ -42,8 +50,9 @@ exports.signup = async (req, res) => {
       password // Password will be hashed by the pre-save hook
     });
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Generate tokens
+    const accessToken = signAccessToken(user._id);
+    const refreshTokenDoc = await createRefreshToken(user._id);
 
     // Remove password from response
     const userResponse = user.toObject();
@@ -51,7 +60,8 @@ exports.signup = async (req, res) => {
 
     res.status(201).json({
       status: 'success',
-      token,
+      accessToken,
+      refreshToken: refreshTokenDoc.token,
       user: userResponse
     });
   } catch (error) {
@@ -96,16 +106,16 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate token
-    const token = generateToken(user._id);
+    const accessToken = signAccessToken(user._id);
+    const refreshTokenDoc = await createRefreshToken(user._id);
 
-    // Remove password from response
     const userResponse = user.toObject();
     delete userResponse.password;
 
     res.json({
       status: 'success',
-      token,
+      accessToken,
+      refreshToken: refreshTokenDoc.token,
       user: userResponse
     });
   } catch (error) {
@@ -136,25 +146,19 @@ exports.protect = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
+
       // Get user from token
       const user = await User.findById(decoded.id).select('-password');
-      
+
       if (!user) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Người dùng không tồn tại'
-        });
+        return res.status(401).json({ status: 'error', message: 'Người dùng không tồn tại' });
       }
 
       // Add user to request
       req.user = user;
       next();
     } catch (err) {
-      return res.status(401).json({
-        status: 'error',
-        message: 'Token không hợp lệ hoặc đã hết hạn'
-      });
+      return res.status(401).json({ status: 'error', message: 'Token không hợp lệ hoặc đã hết hạn' });
     }
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -231,5 +235,45 @@ exports.resetPassword = async (req, res) => {
   } catch (err) {
     console.error('Reset password error:', err);
     res.status(500).json({ status: 'error', message: 'Có lỗi khi reset mật khẩu' });
+  }
+};
+
+// Refresh access token using refresh token
+exports.refresh = async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken) return res.status(400).json({ status: 'fail', message: 'Refresh token required' });
+
+    const stored = await RefreshToken.findOne({ token: refreshToken }).populate('user');
+    if (!stored || stored.revoked) return res.status(401).json({ status: 'fail', message: 'Refresh token invalid' });
+    if (stored.expires < Date.now()) return res.status(401).json({ status: 'fail', message: 'Refresh token expired' });
+
+    // Issue new access token
+    const accessToken = signAccessToken(stored.user._id);
+
+    res.json({ status: 'success', accessToken });
+  } catch (err) {
+    console.error('Refresh token error:', err);
+    res.status(500).json({ status: 'error', message: 'Lỗi khi làm mới token' });
+  }
+};
+
+// Logout (revoke refresh token)
+exports.logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken) return res.status(400).json({ status: 'fail', message: 'Refresh token required' });
+
+    const stored = await RefreshToken.findOne({ token: refreshToken });
+    if (stored) {
+      stored.revoked = true;
+      await stored.save();
+    }
+
+    // Also remove client-side tokens by instructing client
+    res.json({ status: 'success', message: 'Logged out' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ status: 'error', message: 'Lỗi khi đăng xuất' });
   }
 };

@@ -1,0 +1,211 @@
+{
+  "info": {
+    "name": "KTP - RBAC Advanced",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Login as Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);",
+              "  if (json.user) pm.collectionVariables.set('userId', json.user._id);",
+              "  pm.test('Admin login OK', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "} catch (e) {}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "2. Get All Users (Admin/Mod)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      }
+    },
+    {
+      "name": "3. Get Stats (Admin/Mod)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "stats"]
+        }
+      }
+    },
+    {
+      "name": "4. Change User Role (Admin only)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role\": \"moderator\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/:userId/role",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", ":userId", "role"],
+          "variable": [{ "key": "userId", "value": "{{targetUserId}}" }]
+        }
+      }
+    },
+    {
+      "name": "5. Login as Moderator",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.accessToken) pm.collectionVariables.set('modToken', json.accessToken);",
+              "  pm.test('Moderator login OK', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "} catch (e) {}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"moderator@example.com\",\n  \"password\": \"mod123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "6. Get Users as Moderator (OK)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{modToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      }
+    },
+    {
+      "name": "7. Change Role as Moderator (403)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{modToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/:userId/role",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", ":userId", "role"],
+          "variable": [{ "key": "userId", "value": "{{targetUserId}}" }]
+        }
+      }
+    },
+    {
+      "name": "8. Login as User",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.accessToken) pm.collectionVariables.set('userToken', json.accessToken);",
+              "  pm.test('User login OK', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "} catch (e) {}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"user123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "9. Get Users as User (403)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      }
+    },
+    {
+      "name": "10. Delete User (Admin only)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/:userId",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", ":userId"],
+          "variable": [{ "key": "userId", "value": "{{targetUserId}}" }]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "modToken", "value": "" },
+    { "key": "userToken", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "targetUserId", "value": "paste-user-id-here" }
+  ]
+}

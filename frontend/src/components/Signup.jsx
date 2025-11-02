@@ -37,14 +37,15 @@ function Signup({ onSignupSuccess }) {
         password: formData.password
       });
 
-      const { token, user } = response.data;
-      
-      // Save token to localStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      // Update app state
-      if (onSignupSuccess) onSignupSuccess(token);
+  const { accessToken, refreshToken, user } = response.data;
+
+  // Save tokens to localStorage
+  localStorage.setItem('accessToken', accessToken);
+  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+  localStorage.setItem('user', JSON.stringify(user));
+
+  // Update app state
+  if (onSignupSuccess) onSignupSuccess();
       
       // Clear form
       setFormData({

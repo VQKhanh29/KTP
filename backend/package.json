@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "smoke:refresh": "node scripts/refresh_token_smoke.js"
+    "smoke:refresh": "node scripts/refresh_token_smoke.js",
+    "seed:roles": "node scripts/seed_roles.js"
   },
   "keywords": [],
   "author": "",
